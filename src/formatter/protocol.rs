@@ -55,7 +55,7 @@ impl Formatter for Protocol {
     fn end_rdb(&mut self) {
     }
 
-    fn start_database(&mut self, db_number: u32) {
+    fn start_database(&mut self, db_number: u64) {
         let db = db_number.to_string();
         self.emit(vec!["SELECT".as_bytes(), db.as_bytes()])
     }
@@ -66,7 +66,7 @@ impl Formatter for Protocol {
         self.post_expire(key);
     }
 
-    fn start_hash(&mut self, _key: &[u8], _length: u32, expiry: Option<u64>) {
+    fn start_hash(&mut self, _key: &[u8], _length: u64, expiry: Option<u64>) {
         self.pre_expire(expiry);
     }
     fn end_hash(&mut self, key: &[u8]) {
@@ -77,7 +77,7 @@ impl Formatter for Protocol {
     }
 
 
-    fn start_set(&mut self, _key: &[u8], _cardinality: u32, expiry: Option<u64>) {
+    fn start_set(&mut self, _key: &[u8], _cardinality: u64, expiry: Option<u64>) {
         self.pre_expire(expiry);
     }
     fn end_set(&mut self, key: &[u8]) {
@@ -88,7 +88,7 @@ impl Formatter for Protocol {
     }
 
 
-    fn start_list(&mut self, _key: &[u8], _length: u32, expiry: Option<u64>) {
+    fn start_list(&mut self, _key: &[u8], _length: u64, expiry: Option<u64>) {
         self.pre_expire(expiry);
     }
     fn end_list(&mut self, key: &[u8]) {
@@ -98,7 +98,7 @@ impl Formatter for Protocol {
         self.emit(vec!["RPUSH".as_bytes(), key, value]);
     }
 
-    fn start_sorted_set(&mut self, _key: &[u8], _length: u32, expiry: Option<u64>) {
+    fn start_sorted_set(&mut self, _key: &[u8], _length: u64, expiry: Option<u64>) {
         self.pre_expire(expiry);
     }
     fn end_sorted_set(&mut self, key: &[u8]) {

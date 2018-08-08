@@ -6,14 +6,14 @@ use types::Type;
 
 /// A trait to decied to skip databases, types or keys
 pub trait Filter {
-    fn matches_db(&self, _db: u32) -> bool { true }
+    fn matches_db(&self, _db: u64) -> bool { true }
     fn matches_type(&self, _enc_type: u8) -> bool { true }
     fn matches_key(&self, _key: &[u8]) -> bool { true }
 }
 
 /// A filter to match by database, type or a regular expression against key names
 pub struct Simple {
-    databases: Vec<u32>,
+    databases: Vec<u64>,
     types: Vec<Type>,
     keys: Option<Regex>,
 }
@@ -27,7 +27,7 @@ impl Simple {
         }
     }
 
-    pub fn add_database(&mut self, db: u32) {
+    pub fn add_database(&mut self, db: u64) {
         self.databases.push(db);
     }
 
@@ -41,7 +41,7 @@ impl Simple {
 }
 
 impl Filter for Simple {
-    fn matches_db(&self, db: u32) -> bool {
+    fn matches_db(&self, db: u64) -> bool {
         if self.databases.is_empty() {
             true
         } else {

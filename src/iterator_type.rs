@@ -12,12 +12,12 @@ pub enum RdbIteratorType {
     Checksum(Vec<u8>),
 
     /// ResizeDB tag (size of hash table, size of expire hash table)
-    ResizeDB(u32, u32),
+    ResizeDB(u64, u64),
     /// Auxiliary tag (arbitrary key-value pair)
     AuxiliaryKey(Vec<u8>, Vec<u8>),
 
     /// Start of a database
-    StartDatabase(u32),
+    StartDatabase(u64),
 
     /// A key (name and optional expire time)
     Key(Vec<u8>, Option<u64>), // (name, expiry)
@@ -28,28 +28,28 @@ pub enum RdbIteratorType {
     Int(u64),
 
     /// Start of a list (with expected size)
-    ListStart(u32),
+    ListStart(u64),
     /// End of a list
     ListEnd, // includes real size (?)
     /// A list element
     ListElement(Vec<u8>), // Always byte array?
 
     /// Start of a set (with expected size)
-    SetStart(u32),
+    SetStart(u64),
     /// End of a set
     SetEnd,
     /// A set element
     SetElement(Vec<u8>),
 
     /// Start of a sorted set (with expected size)
-    SortedSetStart(u32),
+    SortedSetStart(u64),
     /// End of a sorted set
     SortedSetEnd,
     /// A sorted set element
     SortedSetElement(f64, Vec<u8>), // (score, member)
 
     /// Start of a hash (with number of items)
-    HashStart(u32), // length
+    HashStart(u64), // length
     /// End of a hash
     HashEnd,
     /// A hash element (a field-value pair)

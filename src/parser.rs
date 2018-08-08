@@ -25,18 +25,19 @@ enum RdbParserState {
     RdbEnd,
     Finished,
     Value(u8),
-    List(u32),
-    Set(u32),
-    SortedSet(u32),
-    Hash(u32),
+    List(u64),
+    Set(u64),
+    SortedSet(u64),
+    SortedSet2(u64),
+    Hash(u64),
     Zipmap(Cursor<Vec<u8>>, i32),
-    SetIntset(Cursor<Vec<u8>>, u32, u32),
+    SetIntset(Cursor<Vec<u8>>, u64, u32),
 
-    ListZiplist(Cursor<Vec<u8>>, u32),
-    SortedSetZiplist(Cursor<Vec<u8>>, u32),
-    HashZiplist(Cursor<Vec<u8>>, u32),
+    ListZiplist(Cursor<Vec<u8>>, u64),
+    SortedSetZiplist(Cursor<Vec<u8>>, u64),
+    HashZiplist(Cursor<Vec<u8>>, u64),
 
-    Quicklist(u32, Option<(Cursor<Vec<u8>>, u16)>),
+    Quicklist(u64, Option<(Cursor<Vec<u8>>, u16)>),
 }
 
 pub type RdbIteratorResult = RdbResult<RdbIteratorType>;
@@ -59,7 +60,7 @@ pub struct RdbParser<R: Read, L: Filter> {
     input: R,
     filter: L,
     last_expiretime: Option<u64>,
-    last_database: u32,
+    last_database: u64,
     state: RdbParserState,
 }
 
@@ -80,33 +81,47 @@ fn other_error(desc: &'static str) -> IoError {
     IoError::new(IoErrorKind::Other, desc)
 }
 
-pub fn read_length_with_encoding<R: Read>(input: &mut R) -> RdbResult<(u32, bool)> {
+pub fn read_length_with_encoding<R: Read>(input: &mut R) -> RdbResult<(u64, bool)> {
     let length;
     let mut is_encoded = false;
 
     let enc_type = try!(input.read_u8());
 
     match (enc_type & 0xC0) >> 6 {
+        // 11
         constant::RDB_ENCVAL => {
             is_encoded = true;
-            length = (enc_type & 0x3F) as u32;
+            length = (enc_type & 0x3F) as u64;
         }
+        // 00
         constant::RDB_6BITLEN => {
-            length = (enc_type & 0x3F) as u32;
+            length = (enc_type & 0x3F) as u64;
         }
+        // 01
         constant::RDB_14BITLEN => {
             let next_byte = try!(input.read_u8());
-            length = (((enc_type & 0x3F) as u32) << 8) | next_byte as u32;
+            length = (((enc_type & 0x3F) as u64) << 8) | next_byte as u64;
         }
-        _ => {
-            length = try!(input.read_u32::<BigEndian>());
+        // 10
+        0b10 => {
+            match enc_type {
+                constant::RDB_32BITLEN => {
+                    length = try!(input.read_u32::<BigEndian>()) as u64;
+                }
+                constant::RDB_64BITLEN => {
+                    length = try!(input.read_u64::<BigEndian>());
+                }
+                _ => return Err(other_error("bad full integer kind"))
+            }
         }
+        // No other reachable cases since we are only evaluating 2 MSB
+        _ => unreachable!(),
     }
 
     Ok((length, is_encoded))
 }
 
-pub fn read_length<R: Read>(input: &mut R) -> RdbResult<u32> {
+pub fn read_length<R: Read>(input: &mut R) -> RdbResult<u64> {
     let (length, _) = try!(read_length_with_encoding(input));
     Ok(length)
 }
@@ -271,7 +286,13 @@ impl<R: Read, F: Filter> RdbParser<R, F> {
             RdbParserState::SortedSet(len) => {
                 return self.read_sorted_set_element(len);
             }
-
+            RdbParserState::SortedSet2(0) => {
+                self.state = RdbParserState::OpCode;
+                return Ok(SortedSetEnd);
+            }
+            RdbParserState::SortedSet2(len) => {
+                return self.read_sorted_set_2_element(len);
+            }
             RdbParserState::Zipmap(reader, len) => {
                 return self.read_hash_zipmap_element(reader, len);
             }
@@ -489,7 +510,7 @@ impl<R: Read, F: Filter> RdbParser<R, F> {
     }
 
     fn read_quicklist_element(&mut self,
-                              len: u32,
+                              len: u64,
                               opt: Option<(Cursor<Vec<u8>>, u16)>)
                               -> RdbIteratorResult {
         if let Some((cursor, zlen)) = opt {
@@ -505,7 +526,7 @@ impl<R: Read, F: Filter> RdbParser<R, F> {
     }
 
     fn read_quicklist_ziplist_element(&mut self,
-                                      len: u32,
+                                      len: u64,
                                       mut reader: Cursor<Vec<u8>>,
                                       zlen: u16)
                                       -> RdbIteratorResult {
@@ -523,7 +544,7 @@ impl<R: Read, F: Filter> RdbParser<R, F> {
         Ok(ListElement(entry))
     }
 
-    fn read_quicklist_ziplist(&mut self, len: u32) -> RdbIteratorResult {
+    fn read_quicklist_ziplist(&mut self, len: u64) -> RdbIteratorResult {
         let ziplist = try!(read_blob(&mut self.input));
 
         let mut reader = Cursor::new(ziplist);
@@ -548,6 +569,9 @@ impl<R: Read, F: Filter> RdbParser<R, F> {
             encoding_type::ZSET => {
                 return self.read_sorted_set_header();
             }
+            encoding_type::ZSET_2 => {
+                return self.read_zset_2_header();
+            }
             encoding_type::HASH => {
                 return self.read_hash_header();
             }
@@ -568,6 +592,12 @@ impl<R: Read, F: Filter> RdbParser<R, F> {
             }
             encoding_type::LIST_QUICKLIST => {
                 return self.read_quicklist_header();
+            }
+            encoding_type::MODULE => {
+                panic!("Cannot parse RDB saves with V1 of module API");
+            }
+            encoding_type::MODULE_2 => {
+                unimplemented!();
             }
             _ => {
                 panic!("Value Type not implemented: {}", value_type)
@@ -593,7 +623,7 @@ impl<R: Read, F: Filter> RdbParser<R, F> {
         }
     }
 
-    fn read_linked_list_element(&mut self, typ: Type, len: u32) -> RdbIteratorResult {
+    fn read_linked_list_element(&mut self, typ: Type, len: u64) -> RdbIteratorResult {
         debug_assert!(len > 0);
 
         let blob = try!(read_blob(&mut self.input));
@@ -620,7 +650,14 @@ impl<R: Read, F: Filter> RdbParser<R, F> {
         Ok(SortedSetStart(set_items))
     }
 
-    fn read_sorted_set_element(&mut self, set_items: u32) -> RdbIteratorResult {
+    fn read_zset_2_header(&mut self) -> RdbIteratorResult {
+        let set_items = unwrap_or_panic!(read_length(&mut self.input));
+
+        self.state = RdbParserState::SortedSet2(set_items);
+        Ok(SortedSetStart(set_items))
+    }
+
+    fn read_sorted_set_element(&mut self, set_items: u64) -> RdbIteratorResult {
         debug_assert!(set_items > 0);
 
         let val = try!(read_blob(&mut self.input));
@@ -647,6 +684,16 @@ impl<R: Read, F: Filter> RdbParser<R, F> {
         Ok(SortedSetElement(score, val))
     }
 
+    fn read_sorted_set_2_element(&mut self, set_items: u64) -> RdbIteratorResult {
+        debug_assert!(set_items > 0);
+
+        let val = try!(read_blob(&mut self.input));
+        let score = try!(self.input.read_f64::<LittleEndian>());
+
+        self.state = RdbParserState::SortedSet2(set_items - 1);
+        Ok(SortedSetElement(score, val))
+    }
+
     fn read_hash_header(&mut self) -> RdbIteratorResult {
         let hash_items = try!(read_length(&mut self.input));
 
@@ -654,7 +701,7 @@ impl<R: Read, F: Filter> RdbParser<R, F> {
         Ok(HashStart(hash_items))
     }
 
-    fn read_hash_element(&mut self, hash_items: u32) -> RdbIteratorResult {
+    fn read_hash_element(&mut self, hash_items: u64) -> RdbIteratorResult {
         debug_assert!(hash_items > 0);
 
         let field = try!(read_blob(&mut self.input));
@@ -683,7 +730,7 @@ impl<R: Read, F: Filter> RdbParser<R, F> {
         }
 
         self.state = RdbParserState::Zipmap(reader, length);
-        Ok(HashStart(size as u32))
+        Ok(HashStart(size as _))
     }
 
     fn read_hash_zipmap_element(&mut self,
@@ -730,23 +777,23 @@ impl<R: Read, F: Filter> RdbParser<R, F> {
         let mut reader = Cursor::new(ziplist);
         let (_zlbytes, _zltail, zllen) = try!(read_ziplist_metadata(&mut reader));
 
-        let zllen = zllen as u32;
+        let zllen = zllen as u64;
         match typ {
             Type::List => {
                 self.state = RdbParserState::ListZiplist(reader, zllen);
-                Ok(ListStart(zllen as u32))
+                Ok(ListStart(zllen as u64))
             }
             Type::SortedSet => {
                 assert!(zllen % 2 == 0);
 
                 self.state = RdbParserState::SortedSetZiplist(reader, zllen);
-                Ok(SortedSetStart(zllen / 2 as u32))
+                Ok(SortedSetStart(zllen / 2 as u64))
             }
             Type::Hash => {
                 assert!(zllen % 2 == 0);
 
                 self.state = RdbParserState::HashZiplist(reader, zllen);
-                Ok(HashStart(zllen / 2 as u32))
+                Ok(HashStart(zllen / 2 as u64))
             }
             _ => {
                 panic!("Unknown encoding type for ziplist")
@@ -756,7 +803,7 @@ impl<R: Read, F: Filter> RdbParser<R, F> {
 
     fn read_list_ziplist_element(&mut self,
                                  mut reader: Cursor<Vec<u8>>,
-                                 len: u32)
+                                 len: u64)
                                  -> RdbIteratorResult {
 
         if len > 0 {
@@ -777,7 +824,7 @@ impl<R: Read, F: Filter> RdbParser<R, F> {
 
     fn read_zset_ziplist_element(&mut self,
                                  mut reader: Cursor<Vec<u8>>,
-                                 len: u32)
+                                 len: u64)
                                  -> RdbIteratorResult {
 
         if len > 0 {
@@ -803,7 +850,7 @@ impl<R: Read, F: Filter> RdbParser<R, F> {
 
     fn read_hash_ziplist_element(&mut self,
                                  mut reader: Cursor<Vec<u8>>,
-                                 len: u32)
+                                 len: u64)
                                  -> RdbIteratorResult {
 
         if len > 0 {
@@ -830,13 +877,13 @@ impl<R: Read, F: Filter> RdbParser<R, F> {
         let byte_size = try!(reader.read_u32::<LittleEndian>());
         let intset_length = try!(reader.read_u32::<LittleEndian>());
 
-        self.state = RdbParserState::SetIntset(reader, intset_length as u32, byte_size);
-        Ok(SetStart(intset_length))
+        self.state = RdbParserState::SetIntset(reader, intset_length as _, byte_size);
+        Ok(SetStart(intset_length as _))
     }
 
     fn read_set_intset_element(&mut self,
                                mut reader: Cursor<Vec<u8>>,
-                               len: u32,
+                               len: u64,
                                byte_size: u32)
                                -> RdbIteratorResult {
         debug_assert!(len > 0);
@@ -852,7 +899,9 @@ impl<R: Read, F: Filter> RdbParser<R, F> {
         Ok(SetElement(val.to_string().into_bytes()))
     }
 
-    fn skip(&mut self, skip_bytes: usize) -> RdbResult<()> {
+    fn skip(&mut self, skip_bytes: u64) -> RdbResult<()> {
+        let skip_bytes = skip_bytes as usize;
+
         let mut buf = Vec::with_capacity(skip_bytes);
         match self.input.read(&mut buf) {
             Ok(n) if n == skip_bytes => Ok(()),
@@ -883,24 +932,33 @@ impl<R: Read, F: Filter> RdbParser<R, F> {
             skip_bytes = len;
         }
 
-        self.skip(skip_bytes as usize)
+        self.skip(skip_bytes)
     }
 
     fn skip_object(&mut self, enc_type: u8) -> RdbResult<()> {
         let blobs_to_skip = match enc_type {
-            encoding_type::STRING |
-            encoding_type::HASH_ZIPMAP |
-            encoding_type::LIST_ZIPLIST |
-            encoding_type::SET_INTSET |
-            encoding_type::ZSET_ZIPLIST |
-            encoding_type::HASH_ZIPLIST => 1,
-            encoding_type::LIST | encoding_type::SET =>
-                unwrap_or_panic!(read_length(&mut self.input)),
-            encoding_type::ZSET | encoding_type::HASH =>
-                unwrap_or_panic!(read_length(&mut self.input)) * 2,
-            _ => {
-                panic!("Unknown encoding type: {}", enc_type)
+            | encoding_type::STRING
+            | encoding_type::HASH_ZIPMAP
+            | encoding_type::LIST_ZIPLIST
+            | encoding_type::SET_INTSET
+            | encoding_type::ZSET_ZIPLIST
+            | encoding_type::HASH_ZIPLIST => {
+                1
             }
+            | encoding_type::LIST
+            | encoding_type::SET => {
+                unwrap_or_panic!(read_length(&mut self.input))
+            }
+            | encoding_type::ZSET
+            | encoding_type::HASH => {
+                unwrap_or_panic!(read_length(&mut self.input)) * 2
+            }
+            encoding_type::MODULE => panic!("Cannot parse RDB saves with V1 of module API"),
+            encoding_type::ZSET_2 => unimplemented!(),
+            // MODULE_2 is parseable because type flag has an EOF variant to
+            // indicate end of module data.
+            encoding_type::MODULE_2 => unimplemented!(),
+            _ => panic!("Unknown encoding type: {}", enc_type)
         };
 
         for _ in 0..blobs_to_skip {
