@@ -8,7 +8,7 @@ use super::write_str;
 /// Format in plaintext, good for diffing
 pub struct Plain {
     out: Box<Write + 'static>,
-    dbnum: u32,
+    dbnum: u64,
     index: u32,
 }
 
@@ -34,7 +34,7 @@ impl Formatter for Plain {
         write_str(&mut self.out, "\n");
     }
 
-    fn start_database(&mut self, db_number: u32) {
+    fn start_database(&mut self, db_number: u64) {
         self.dbnum = db_number;
     }
 
@@ -80,7 +80,7 @@ impl Formatter for Plain {
         self.out.flush();
     }
 
-    fn start_list(&mut self, _key: &[u8], _length: u32, _expiry: Option<u64>) {
+    fn start_list(&mut self, _key: &[u8], _length: u64, _expiry: Option<u64>) {
         self.index = 0;
     }
     fn list_element(&mut self, key: &[u8], value: &[u8]) {
@@ -95,7 +95,7 @@ impl Formatter for Plain {
         self.index += 1;
     }
 
-    fn start_sorted_set(&mut self, _key: &[u8], _length: u32, _expiry: Option<u64>) {
+    fn start_sorted_set(&mut self, _key: &[u8], _length: u64, _expiry: Option<u64>) {
         self.index = 0;
     }
 

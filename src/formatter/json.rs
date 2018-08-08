@@ -13,8 +13,8 @@ pub struct JSON {
     is_first_db: bool,
     has_databases: bool,
     is_first_key_in_db: bool,
-    elements_in_key: u32,
-    element_index: u32,
+    elements_in_key: u64,
+    element_index: u64,
 }
 
 impl JSON {
@@ -37,7 +37,7 @@ fn encode_to_ascii(value: &[u8]) -> String {
 }
 
 impl JSON {
-    fn start_key(&mut self, length: u32) {
+    fn start_key(&mut self, length: u64) {
         if !self.is_first_key_in_db {
             write_str(&mut self.out, ",");
         }
@@ -74,7 +74,7 @@ impl Formatter for JSON {
         write_str(&mut self.out, "]\n");
     }
 
-    fn start_database(&mut self, _db_number: u32) {
+    fn start_database(&mut self, _db_number: u64) {
         if !self.is_first_db {
             write_str(&mut self.out, "},");
         }
@@ -92,7 +92,7 @@ impl Formatter for JSON {
         self.write_value(value);
     }
 
-    fn start_hash(&mut self, key: &[u8], length: u32, _expiry: Option<u64>) {
+    fn start_hash(&mut self, key: &[u8], length: u64, _expiry: Option<u64>) {
         self.start_key(length);
         self.write_key(key);
         write_str(&mut self.out, ":{");
@@ -112,7 +112,7 @@ impl Formatter for JSON {
         self.out.flush();
     }
 
-    fn start_set(&mut self, key: &[u8], cardinality: u32, _expiry: Option<u64>) {
+    fn start_set(&mut self, key: &[u8], cardinality: u64, _expiry: Option<u64>) {
         self.start_key(cardinality);
         self.write_key(key);
         write_str(&mut self.out, ":[");
@@ -128,7 +128,7 @@ impl Formatter for JSON {
         self.write_value(member);
     }
 
-    fn start_list(&mut self, key: &[u8], length: u32, _expiry: Option<u64>) {
+    fn start_list(&mut self, key: &[u8], length: u64, _expiry: Option<u64>) {
         self.start_key(length);
         self.write_key(key);
         write_str(&mut self.out, ":[");
@@ -143,7 +143,7 @@ impl Formatter for JSON {
         self.write_value(value);
     }
 
-    fn start_sorted_set(&mut self, key: &[u8], length: u32, _expiry: Option<u64>) {
+    fn start_sorted_set(&mut self, key: &[u8], length: u64, _expiry: Option<u64>) {
         self.start_key(length);
         self.write_key(key);
         write_str(&mut self.out, ":{");
