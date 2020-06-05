@@ -1,8 +1,9 @@
 [package]
-
 name = "rdb"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["Jan-Erik Rediger <badboy@fnordig.de>"]
+
+edition = "2018"
 
 keywords = ["redis", "database"]
 description = "Fast and efficient RDB parsing utility"
@@ -32,5 +33,8 @@ doc  = false
 lzf = "0.3"
 getopts = "0.2"
 rustc-serialize = "0.3"
-regex = "0.1"
-byteorder = "0.5"
+regex = "1"
+byteorder = "1"
+serde = "1"
+serde_json = "1.0.53"
+hex = "0.4.2"

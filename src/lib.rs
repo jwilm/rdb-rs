@@ -72,37 +72,28 @@
 //! value
 //! ```
 
-extern crate lzf;
-extern crate rustc_serialize as serialize;
-extern crate regex;
-extern crate byteorder;
-
 use std::io::Read;
 
 #[doc(hidden)]
-pub use types::{
-    ZiplistEntry,
-    Type,
-
+pub use crate::types::{
     /* error and result types */
-    RdbError,
-    RdbResult,
-    RdbOk,
+    RdbError, RdbOk, RdbResult, Type, ZiplistEntry,
 };
 
-pub use parser::RdbParser;
+pub use crate::parser::RdbParser;
 
-use formatter::Formatter;
-use filter::Filter;
+use crate::filter::Filter;
+use crate::formatter::Formatter;
 
+#[macro_use]
 mod macros;
 mod constants;
 mod helper;
 
-pub mod types;
-pub mod parser;
-pub mod formatter;
 pub mod filter;
+pub mod formatter;
+pub mod parser;
+pub mod types;
 
 pub fn parse<R: Read, F: Formatter, T: Filter>(input: R, formatter: F, filter: T) -> RdbOk {
     let mut parser = RdbParser::new(input, formatter, filter);
