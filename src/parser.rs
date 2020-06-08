@@ -1,5 +1,6 @@
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 use lzf;
+use std::borrow::Cow;
 use std::io::Error as IoError;
 use std::io::ErrorKind as IoErrorKind;
 use std::io::{Cursor, Read};
@@ -27,8 +28,8 @@ pub struct RdbParser<R: Read, F: Formatter, L: Filter> {
 }
 
 #[inline]
-fn other_error(desc: &'static str) -> IoError {
-    IoError::new(IoErrorKind::Other, desc)
+fn other_error(desc: impl Into<Cow<'static, str>>) -> IoError {
+    IoError::new(IoErrorKind::Other, desc.into())
 }
 
 pub fn read_length_with_encoding<R: Read>(input: &mut R) -> RdbResult<(u32, bool)> {
@@ -95,7 +96,12 @@ pub fn verify_version<R: Read>(input: &mut R) -> RdbOk {
     if is_ok {
         Ok(())
     } else {
-        Err(other_error("Version not supported"))
+        Err(other_error(format!(
+            "Version {} RDB files are not supported. Supported versions are {}-{}",
+            version,
+            version::SUPPORTED_MINIMUM,
+            version::SUPPORTED_MAXIMUM
+        )))
     }
 }
 
@@ -243,6 +249,31 @@ impl<R: Read, F: Formatter, L: Filter> RdbParser<R, F, L> {
             Type::Set => self.formatter.end_set(key)?,
             _ => panic!("Unknown encoding type for linked list"),
         }
+
+        Ok(())
+    }
+
+    fn read_sorted_set_type_2(&mut self, key: &[u8]) -> RdbOk {
+        let mut set_items = unwrap_or_panic!(read_length(&mut self.input));
+
+        self.formatter.start_sorted_set(
+            key,
+            set_items,
+            self.last_expiretime,
+            EncodingType::Hashtable,
+        )?;
+
+        while set_items > 0 {
+            let val = read_blob(&mut self.input)?;
+
+            let score = self.input.read_f64::<LittleEndian>()?;
+
+            self.formatter.sorted_set_element(key, score, &val)?;
+
+            set_items -= 1;
+        }
+
+        self.formatter.end_sorted_set(key)?;
 
         Ok(())
     }
@@ -631,6 +662,7 @@ impl<R: Read, F: Formatter, L: Filter> RdbParser<R, F, L> {
             encoding_type::LIST => self.read_linked_list(key, Type::List)?,
             encoding_type::SET => self.read_linked_list(key, Type::Set)?,
             encoding_type::ZSET => self.read_sorted_set(key)?,
+            encoding_type::ZSET_2 => self.read_sorted_set_type_2(key)?,
             encoding_type::HASH => self.read_hash(key)?,
             encoding_type::HASH_ZIPMAP => self.read_hash_zipmap(key)?,
             encoding_type::LIST_ZIPLIST => self.read_list_ziplist(key)?,
@@ -685,6 +717,15 @@ impl<R: Read, F: Formatter, L: Filter> RdbParser<R, F, L> {
             }
             encoding_type::ZSET | encoding_type::HASH => {
                 unwrap_or_panic!(read_length(&mut self.input)) * 2
+            }
+            encoding_type::ZSET_2 => {
+                let length = read_length(&mut self.input)?;
+                for _ in 0..length {
+                    self.skip_blob()?;
+                    self.skip(8)?;
+                }
+
+                0
             }
             _ => panic!("Unknown encoding type: {}", enc_type),
         };
