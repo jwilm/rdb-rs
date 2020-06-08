@@ -139,9 +139,9 @@ fn read_ziplist_metadata<T: Read>(input: &mut T) -> RdbResult<(u32, u32, u16)> {
 impl<R: Read, F: Formatter, L: Filter> RdbParser<R, F, L> {
     pub fn new(input: R, formatter: F, filter: L) -> RdbParser<R, F, L> {
         RdbParser {
-            input: input,
-            formatter: formatter,
-            filter: filter,
+            input,
+            formatter,
+            filter,
             last_expiretime: None,
         }
     }

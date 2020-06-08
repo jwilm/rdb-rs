@@ -1,8 +1,6 @@
-extern crate getopts;
-extern crate rdb;
-extern crate regex;
 use getopts::Options;
-use regex::Regex;
+use indicatif::{ProgressBar, ProgressStyle};
+use regex::bytes::Regex;
 use std::env;
 use std::fs::File;
 use std::io::{BufReader, Write};
@@ -99,7 +97,17 @@ pub fn main() {
 
     let path = matches.free[0].clone();
     let file = File::open(&Path::new(&*path)).unwrap();
-    let reader = BufReader::new(file);
+
+    let file_length = file.metadata().map(|m| m.len()).unwrap_or(0);
+
+    let progress_bar = ProgressBar::new(file_length);
+    progress_bar.set_style(ProgressStyle::default_bar().template(
+        "[{elapsed_precise}] {bar:40.cyan/blue} {bytes}/{total_bytes} ({bytes_per_sec}, {eta})",
+    ));
+
+    let reader = rdb::ReadProgressBar::new(file, progress_bar);
+
+    let reader = BufReader::new(reader);
 
     let mut res = Ok(());
 
