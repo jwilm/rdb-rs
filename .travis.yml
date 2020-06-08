@@ -4,8 +4,6 @@ rust:
   - stable
   - nightly
   - beta
-  - 1.6.0
-
 
 script: make test
 
