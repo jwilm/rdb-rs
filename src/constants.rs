@@ -1,6 +1,6 @@
 pub mod version {
     pub const SUPPORTED_MINIMUM: u32 = 1;
-    pub const SUPPORTED_MAXIMUM: u32 = 7;
+    pub const SUPPORTED_MAXIMUM: u32 = 8;
 }
 
 pub mod constant {
@@ -25,6 +25,7 @@ pub mod encoding_type {
     pub const SET: u8 = 2;
     pub const ZSET: u8 = 3;
     pub const HASH: u8 = 4;
+    pub const ZSET_2: u8 = 5;
     pub const HASH_ZIPMAP: u8 = 9;
     pub const LIST_ZIPLIST: u8 = 10;
     pub const SET_INTSET: u8 = 11;
