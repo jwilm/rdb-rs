@@ -1,4 +1,5 @@
 use std::io::Error as IoError;
+use thiserror::Error;
 
 use crate::constants::encoding_type;
 
@@ -8,9 +9,16 @@ pub enum ZiplistEntry {
     Number(i64),
 }
 
-pub type RdbError = IoError;
-
 pub type RdbResult<T> = Result<T, RdbError>;
+
+#[derive(Error, Debug)]
+pub enum RdbError {
+    #[error("I/O Error: {0}")]
+    Io(#[from] IoError),
+
+    #[error("{0}")]
+    Other(String),
+}
 
 pub type RdbOk = RdbResult<()>;
 

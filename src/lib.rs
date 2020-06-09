@@ -89,9 +89,6 @@ use crate::formatter::Formatter;
 mod macros;
 mod constants;
 mod helper;
-mod read_pb;
-
-pub use read_pb::ReadProgressBar;
 
 pub mod filter;
 pub mod formatter;

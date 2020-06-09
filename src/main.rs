@@ -105,7 +105,7 @@ pub fn main() {
         "[{elapsed_precise}] {bar:40.cyan/blue} {bytes}/{total_bytes} ({bytes_per_sec}, {eta})",
     ));
 
-    let reader = rdb::ReadProgressBar::new(file, progress_bar);
+    let reader = progress_bar.wrap_read(file);
 
     let reader = BufReader::new(reader);
 
