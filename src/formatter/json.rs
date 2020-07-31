@@ -3,7 +3,6 @@ use crate::formatter::Formatter;
 use crate::types::{EncodingType, RdbResult};
 use std::io;
 use std::io::Write;
-use std::str;
 
 pub struct JSON {
     out: Box<dyn Write + 'static>,
@@ -29,7 +28,7 @@ impl JSON {
 }
 
 fn encode_to_ascii(value: &[u8]) -> String {
-    let s = unsafe { str::from_utf8_unchecked(value) };
+    let s = String::from_utf8_lossy(value);
     serde_json::to_string(&s).unwrap()
 }
 
